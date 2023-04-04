@@ -3,6 +3,7 @@ import 'package:chat_gpt_sdk/chat_gpt_sdk.dart';
 import 'package:flutter/material.dart';
 import 'package:velocity_x/velocity_x.dart';
 
+import 'ThreeDots.dart';
 import 'chat_message.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -16,40 +17,58 @@ class _ChatScreenState extends State<ChatScreen>{
   final TextEditingController _textController = TextEditingController();
   final List<ChatMessage> _messages = <ChatMessage>[];
 
-  final String apiKey = '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';
+  final String apiKey = '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';
 
   late OpenAI openAI ;
   final tController = StreamController<CTResponse?>.broadcast();
   StreamSubscription? _subscription;
 
+  bool _isTyping = false;
+
   void _sendMessage() {
+    String myMessage = _textController.text;
     _textController.clear();
+
     ChatMessage message = ChatMessage(
-      text: _textController.text,
-      sender: 'Me',
+      text: myMessage,
+      sender: 'MToan',
+      isMe: true,
     );
+
     setState(() {
       _messages.insert(0, message);
+      _isTyping = true;
     });
 
-    final tController = StreamController<CTResponse?>.broadcast();
+    final request = ChatCompleteText(
+      model: ChatModel.ChatGptTurbo0301Model,
+      maxToken: 500,
+      messages: [Map.of({"role": "user", "content": myMessage})],
+    );
 
-    print('Sending request to OpenAI...');
-    print(openAI);
-
-    final request = CompleteText(prompt: 'What is human life expectancy in the United States?',
-        model: kCompletion, maxTokens: 200);
-    openAI.onCompletionStream(request:request).listen((response) => print(response))
-        .onError((err) {
-      print("$err");
+    final response = openAI.onChatCompletion(request: request).then((value) => {
+      print("data -> ${value!.choices[0].message.content}"),
+      setState(() {
+        _isTyping = false;
+        _messages.insert(0, ChatMessage(
+          text: value.choices[0].message.content,
+          sender: 'J.A.R.V.I.S.',
+          isMe: false,
+        ));
+      })
     });
+
+    print(response);
   }
-
 
   @override
   void initState() {
     super.initState();
-    openAI = OpenAI.instance.build(token: apiKey,baseOption: HttpSetup(receiveTimeout: const Duration(seconds: 5)),isLog: true);
+    openAI = OpenAI.instance.build(
+        token: apiKey,
+        baseOption: HttpSetup(receiveTimeout: const Duration(seconds: 50)),
+        isLog: true
+    );
   }
 
 
@@ -58,25 +77,6 @@ class _ChatScreenState extends State<ChatScreen>{
     _subscription?.cancel();
     tController.close();
     super.dispose();
-  }
-
-  Widget _buildTextComposer() {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: _textController,
-            decoration: InputDecoration.collapsed(hintText: 'Send a message'),
-          ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.send),
-          onPressed: () {
-            _sendMessage();
-          },
-        )
-      ],
-    );
   }
 
   @override
@@ -98,11 +98,34 @@ class _ChatScreenState extends State<ChatScreen>{
                 },
               ),
             ),
+            _isTyping ? Center(
+              child: Container(
+                  margin: EdgeInsets.only(bottom: 10),
+                  child: ThreeDots()
+              ),
+            ) : Container(),
+            const Divider(height: 1),
             Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
                 color: context.cardColor,
               ),
-              child: _buildTextComposer(),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _textController,
+                      decoration: InputDecoration.collapsed(hintText: 'Send a message'),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    onPressed: () {
+                      _sendMessage();
+                    },
+                  )
+                ],
+              ),
             )
           ],
         ),
