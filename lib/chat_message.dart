@@ -1,8 +1,9 @@
+import 'package:chat_app_gpt/tts.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:velocity_x/velocity_x.dart';
 
-class ChatMessage extends StatelessWidget{
+class ChatMessage extends StatefulWidget{
   ChatMessage({required this.text, required this.sender, required this.isMe});
 
   final String text;
@@ -10,14 +11,21 @@ class ChatMessage extends StatelessWidget{
   final bool isMe;
 
   @override
+  State<ChatMessage> createState() => _ChatMessageState();
+}
+
+class _ChatMessageState extends State<ChatMessage> {
+
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: widget.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          !isMe ? const CircleAvatar(
+          !widget.isMe ? const CircleAvatar(
             backgroundImage: AssetImage('assets/images/jarvis.png'),
           ) : Container(),
           const SizedBox(width: 10),
@@ -25,8 +33,8 @@ class ChatMessage extends StatelessWidget{
             child: Container(
               padding: EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isMe ? Colors.green : Colors.grey[300],
-                borderRadius: isMe ? const BorderRadius.only(
+                color: widget.isMe ? Colors.green : Colors.grey[300],
+                borderRadius: widget.isMe ? const BorderRadius.only(
                   topLeft: Radius.circular(20),
                   bottomLeft: Radius.circular(20),
                   bottomRight: Radius.circular(20),
@@ -40,7 +48,7 @@ class ChatMessage extends StatelessWidget{
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    sender,
+                    widget.sender,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -49,7 +57,7 @@ class ChatMessage extends StatelessWidget{
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    text,
+                    widget.text,
                     style: TextStyle(
                       fontSize: 16.0,
                       color: Colors.grey[800],
@@ -59,9 +67,22 @@ class ChatMessage extends StatelessWidget{
               ),
             ),
           ),
-          isMe ? const CircleAvatar(
+          widget.isMe ? const CircleAvatar(
             backgroundImage: AssetImage('assets/images/tony.jpg'),
-          ) : Container(),
+          ) : Container(
+            child: IconButton(
+              icon: Icon(TextToSpeech.getVoiceEnabled() ? Icons.volume_off : Icons.volume_up),
+              onPressed: () {
+                if(TextToSpeech.getVoiceEnabled()) {
+                  TextToSpeech.stop();
+                } else {
+                  TextToSpeech.speak(widget.text).then((value) =>  print('done' + TextToSpeech.getVoiceEnabled().toString()));
+                }
+
+                setState(() {});
+              },
+            )
+            ),
           const SizedBox(width: 10),
         ],
       ),

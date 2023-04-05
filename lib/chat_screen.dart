@@ -1,6 +1,8 @@
-import 'dart:async';
-import 'package:chat_gpt_sdk/chat_gpt_sdk.dart';
+import 'package:chat_app_gpt/message_management.dart';
+import 'package:chat_app_gpt/tts.dart';
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import 'package:velocity_x/velocity_x.dart';
 
 import 'ThreeDots.dart';
@@ -17,13 +19,59 @@ class _ChatScreenState extends State<ChatScreen>{
   final TextEditingController _textController = TextEditingController();
   final List<ChatMessage> _messages = <ChatMessage>[];
 
-  final String apiKey = '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';
-
-  late OpenAI openAI ;
-  final tController = StreamController<CTResponse?>.broadcast();
-  StreamSubscription? _subscription;
-
   bool _isTyping = false;
+  late GPTMessageManagement gptMessageManagement;
+
+  final SpeechToText _speechToText = SpeechToText();
+  bool _speechEnabled = false;
+  String _lastWords = '';
+
+  @override
+  void initState() {
+    super.initState();
+    gptMessageManagement = GPTMessageManagement();
+    _initSpeech();
+  }
+
+
+  @override
+  void dispose() {
+    gptMessageManagement.dispose();
+    super.dispose();
+  }
+
+  /// This has to happen only once per app
+  void _initSpeech() async {
+    _speechEnabled = await _speechToText.initialize();
+    setState(() {});
+  }
+
+  /// Each time to start a speech recognition session
+  void _startListening() async {
+    print('start listening');
+
+    await _speechToText.listen(onResult: _onSpeechResult);
+    setState(() {});
+  }
+
+  /// Manually stop the active speech recognition session
+  /// Note that there are also timeouts that each platform enforces
+  /// and the SpeechToText plugin supports setting timeouts on the
+  /// listen method.
+  void _stopListening() async {
+    print('stop listening');
+    await _speechToText.stop();
+    setState(() {});
+  }
+
+  /// This is the callback that the SpeechToText plugin calls when
+  /// the platform returns recognized words.
+  void _onSpeechResult(SpeechRecognitionResult result) {
+    print('_onSpeechResult ${result.recognizedWords}');
+    setState(() {
+      _textController.text = result.recognizedWords;
+    });
+  }
 
   void _sendMessage() {
     String myMessage = _textController.text;
@@ -40,18 +88,12 @@ class _ChatScreenState extends State<ChatScreen>{
       _isTyping = true;
     });
 
-    final request = ChatCompleteText(
-      model: ChatModel.ChatGptTurbo0301Model,
-      maxToken: 500,
-      messages: [Map.of({"role": "user", "content": myMessage})],
-    );
-
-    final response = openAI.onChatCompletion(request: request).then((value) => {
-      print("data -> ${value!.choices[0].message.content}"),
+    final response = gptMessageManagement.sendMessageToGPT(myMessage).then((value) =>
+    {
       setState(() {
         _isTyping = false;
         _messages.insert(0, ChatMessage(
-          text: value.choices[0].message.content,
+          text: value,
           sender: 'J.A.R.V.I.S.',
           isMe: false,
         ));
@@ -59,24 +101,6 @@ class _ChatScreenState extends State<ChatScreen>{
     });
 
     print(response);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    openAI = OpenAI.instance.build(
-        token: apiKey,
-        baseOption: HttpSetup(receiveTimeout: const Duration(seconds: 50)),
-        isLog: true
-    );
-  }
-
-
-  @override
-  void dispose() {
-    _subscription?.cancel();
-    tController.close();
-    super.dispose();
   }
 
   @override
@@ -113,10 +137,38 @@ class _ChatScreenState extends State<ChatScreen>{
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _textController,
-                      decoration: InputDecoration.collapsed(hintText: 'Send a message'),
+                    child: Container(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: 300,
+                        ),
+                        child: TextField(
+                          controller: _textController,
+                          decoration: InputDecoration(
+                            hintText: 'Type your message here...',
+                            border: InputBorder.none,
+                          ),
+                          maxLines: null,
+                          onChanged: (value) {
+                            setState(() {
+                              _isTyping = value.isNotEmpty;
+                            });
+                          },
+                        ),
+                      ),
                     ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                        _speechToText.isNotListening ? Icons.mic_off : Icons.mic,
+                        color: _speechToText.isListening ? Colors.red : Colors.black
+                    ),
+                    tooltip: 'Listen',
+                    onPressed: () {
+                      _speechToText.isNotListening ? _startListening() : _stopListening();
+
+                      print('Listening: ${_speechToText.isListening}');
+                    },
                   ),
                   IconButton(
                     icon: const Icon(Icons.send),

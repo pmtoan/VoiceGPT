@@ -1,7 +1,11 @@
 import 'package:chat_app_gpt/chat_screen.dart';
+import 'package:chat_app_gpt/tts.dart';
 import 'package:flutter/material.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  TextToSpeech.initTTS();
+
   runApp(const MyApp());
 }
 
