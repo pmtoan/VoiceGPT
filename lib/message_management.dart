@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:chat_gpt_sdk/chat_gpt_sdk.dart';
 
 class GPTMessageManagement {
-  final String apiKey = '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';
+  final String apiKey = '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';
 
   late OpenAI openAI ;
   final tController = StreamController<CTResponse?>.broadcast();

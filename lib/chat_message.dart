@@ -69,7 +69,7 @@ class _ChatMessageState extends State<ChatMessage> {
           ),
           widget.isMe ? const CircleAvatar(
             backgroundImage: AssetImage('assets/images/tony.jpg'),
-          ) : Container(
+          ) : Center(
             child: IconButton(
               icon: Icon(TextToSpeech.getVoiceEnabled() ? Icons.volume_off : Icons.volume_up),
               onPressed: () {

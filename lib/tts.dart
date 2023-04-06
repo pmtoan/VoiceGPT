@@ -6,7 +6,6 @@ class TextToSpeech {
 
   static initTTS() async {
     _flutterTts.setLanguage("en-US");
-    _flutterTts.setVoice({"name": "en-NG-language", "locale": "en-NG"});
   }
 
   static Future speak(String text) async {
@@ -22,6 +21,16 @@ class TextToSpeech {
 
   static bool getVoiceEnabled() {
     return _isVoiceEnabled;
+  }
+
+  static setLanguage(String language) async {
+    await _flutterTts.setLanguage(language);
+    print("Language set to: ${language}");
+    print("Language set to: ${await _flutterTts.getDefaultVoice}");
+    print("Language set to: ${await _flutterTts.getVoices}");
+    print("Language set to: ${await _flutterTts.getDefaultEngine}");
+    print("Language set to: ${await _flutterTts.getEngines}");
+    print("Language set to: ${await _flutterTts.getLanguages}");
   }
 
 }
