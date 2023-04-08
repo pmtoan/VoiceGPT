@@ -1,5 +1,5 @@
 import 'package:chat_app_gpt/chat_screen.dart';
-import 'package:chat_app_gpt/tts.dart';
+import 'package:chat_app_gpt/text_to_speech.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -15,12 +15,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ChatGPT Demo',
-
+      title: 'VoiceGPT',
       theme: ThemeData(
         primarySwatch: Colors.green,
       ),
-      home: const ChatScreen(),
+      home: const SafeArea(child: ChatScreen()),
     );
   }
 }

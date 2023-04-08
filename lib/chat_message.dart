@@ -1,12 +1,19 @@
-import 'package:chat_app_gpt/tts.dart';
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:chat_app_gpt/text_to_speech.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:velocity_x/velocity_x.dart';
 
 class ChatMessage extends StatefulWidget{
-  ChatMessage({required this.text, required this.sender, required this.isMe});
+  ChatMessage({
+    required this.text, 
+    required this.sender, 
+    required this.isMe,
+    });
 
-  final String text;
+  String text;
   final String sender;
   final bool isMe;
 
@@ -26,7 +33,7 @@ class _ChatMessageState extends State<ChatMessage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           !widget.isMe ? const CircleAvatar(
-            backgroundImage: AssetImage('assets/images/jarvis.png'),
+            backgroundImage: AssetImage('assets/images/gpt_avt_02.webp'),
           ) : Container(),
           const SizedBox(width: 10),
           Flexible(
@@ -49,7 +56,7 @@ class _ChatMessageState extends State<ChatMessage> {
                 children: [
                   Text(
                     widget.sender,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
@@ -61,22 +68,21 @@ class _ChatMessageState extends State<ChatMessage> {
                     style: TextStyle(
                       fontSize: 16.0,
                       color: Colors.grey[800],
-                    ),
+                    )
                   ),
                 ],
               ),
             ),
           ),
-          widget.isMe ? const CircleAvatar(
-            backgroundImage: AssetImage('assets/images/tony.jpg'),
-          ) : Center(
+          widget.isMe ? Container() : 
+          Center(
             child: IconButton(
               icon: Icon(TextToSpeech.getVoiceEnabled() ? Icons.volume_off : Icons.volume_up),
               onPressed: () {
                 if(TextToSpeech.getVoiceEnabled()) {
                   TextToSpeech.stop();
                 } else {
-                  TextToSpeech.speak(widget.text).then((value) =>  print('done' + TextToSpeech.getVoiceEnabled().toString()));
+                  TextToSpeech.speak(widget.text).then((value) =>  debugPrint('done' + TextToSpeech.getVoiceEnabled().toString()));
                 }
 
                 setState(() {});

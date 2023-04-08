@@ -3,29 +3,51 @@ import 'dart:async';
 import 'package:chat_gpt_sdk/chat_gpt_sdk.dart';
 
 class GPTMessageManagement {
-  final String apiKey = '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';
+  final String apiKey = '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';
 
   late OpenAI openAI ;
-  final tController = StreamController<CTResponse?>.broadcast();
 
   List<Map<String, String>> history = [];
 
   GPTMessageManagement() {
     openAI = OpenAI.instance.build(
         token: apiKey,
-        baseOption: HttpSetup(receiveTimeout: const Duration(seconds: 50)),
+        baseOption: HttpSetup(receiveTimeout: const Duration(seconds: 60)),
         isLog: true
     );
   }
 
+  void chatCompleteWithSSE(String text, dynamic Function(Stream<List<int>>) callback) {
+    addMessageToHistory("user", text);
+
+    final request = ChatCompleteText(
+      messages: history, 
+      maxToken: 2048, 
+      model: ChatModel.ChatGptTurboModel
+    );
+
+    openAI.onChatCompletionSSE(
+      request: request,
+      complete: callback
+      );
+  }
+
+  void addMessageToHistory(String role, String content) {
+    history.add({"role": role, "content": content});
+
+    if(history.length > 8) {
+      history.removeAt(0);
+    }
+  }
+
   Future<String> sendMessageToGPT(String text) async {
+    addMessageToHistory("user", text);
+
     final request = ChatCompleteText(
       model: ChatModel.ChatGptTurbo0301Model,
       maxToken: 2048,
       messages: history,
     );
-
-    addMessageToHistory("user", text);
 
     final response = await openAI.onChatCompletion(request: request);
 
@@ -35,17 +57,4 @@ class GPTMessageManagement {
 
     return content;
   }
-
-  void addMessageToHistory(String role, String content) {
-    history.add({"role": role, "content": content});
-
-    if(history.length > 6) {
-      history.removeAt(0);
-    }
-  }
-
-  void dispose() {
-    tController.close();
-  }
-
 }
