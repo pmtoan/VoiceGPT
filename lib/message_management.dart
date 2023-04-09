@@ -1,60 +1,63 @@
 import 'dart:async';
+import 'dart:io';
 
-import 'package:chat_gpt_sdk/chat_gpt_sdk.dart';
+import 'package:chat_app_gpt/message_model.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
 
-class GPTMessageManagement {
-  final String apiKey = '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';
+class MessageManagement {
+  MessageManagement._();
+  static final MessageManagement db = MessageManagement._();
 
-  late OpenAI openAI ;
+  static Database? _database;
+  static String databaseName = 'Message';
 
-  List<Map<String, String>> history = [];
+  Future<Database> get database async =>
+      _database ??= await initDB();
 
-  GPTMessageManagement() {
-    openAI = OpenAI.instance.build(
-        token: apiKey,
-        baseOption: HttpSetup(receiveTimeout: const Duration(seconds: 60)),
-        isLog: true
-    );
+  initDB() async {
+    Directory documentsDirectory = await getApplicationDocumentsDirectory();
+    String path = join(documentsDirectory.path, "message_history.db");
+    return await openDatabase(path, version: 1, onOpen: (db) {
+    }, onCreate: (Database db, int version) async {
+      await db.execute("CREATE TABLE $databaseName ("
+          "id INTEGER PRIMARY KEY AUTOINCREMENT , "
+          "text TEXT , "
+          "isMe BIT , "
+          "isFirstReading BIT "
+          ");");
+    });
+  }
+  
+  newMessage(Message newMessage) async {
+    final db = await database;
+    var res = await db.insert(databaseName, newMessage.toMap());
+    return res;
   }
 
-  void chatCompleteWithSSE(String text, dynamic Function(Stream<List<int>>) callback) {
-    addMessageToHistory("user", text);
-
-    final request = ChatCompleteText(
-      messages: history, 
-      maxToken: 2048, 
-      model: ChatModel.ChatGptTurboModel
-    );
-
-    openAI.onChatCompletionSSE(
-      request: request,
-      complete: callback
-      );
+  Future<List<Message>> getAllMessages() async {
+    final db = await database;
+    var res = await db.query(databaseName);
+    List<Message> list =
+        res.isNotEmpty ? res.map((m) => Message.fromMap(m)).toList() : [];
+    return list;
   }
 
-  void addMessageToHistory(String role, String content) {
-    history.add({"role": role, "content": content});
-
-    if(history.length > 8) {
-      history.removeAt(0);
-    }
+  markedFirstReading(Message message) async {
+    final db = await database;
+    Message readMessage = Message(
+        id: message.id,
+        text: message.text,
+        isMe: message.isMe,
+        isFirstReading: true);
+    var res = await db.update(databaseName, readMessage.toMap(),
+        where: "id = ?", whereArgs: [readMessage.id]);
+    return res;
   }
-
-  Future<String> sendMessageToGPT(String text) async {
-    addMessageToHistory("user", text);
-
-    final request = ChatCompleteText(
-      model: ChatModel.ChatGptTurbo0301Model,
-      maxToken: 2048,
-      messages: history,
-    );
-
-    final response = await openAI.onChatCompletion(request: request);
-
-    String content = response!.choices[0].message.content;
-
-    addMessageToHistory("assistant", content);
-
-    return content;
+  
+  deleteAll() async {
+    final db = await database;
+    db.rawDelete("DELETE FROM $databaseName");
   }
 }

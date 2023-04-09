@@ -1,10 +1,13 @@
+import 'package:avatar_glow/avatar_glow.dart';
 import 'package:chat_app_gpt/message_management.dart';
+import 'package:chat_app_gpt/message_model.dart';
+import 'package:chat_app_gpt/openAI_api_management.dart';
+import 'package:chat_app_gpt/settings_screen.dart';
+import 'package:chat_app_gpt/speech_to_text.dart';
 import 'package:chat_app_gpt/text_to_speech.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
+import 'package:easy_settings/easy_settings.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import 'package:velocity_x/velocity_x.dart';
 
 import 'three_dots.dart';
@@ -19,194 +22,116 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen>{
   final TextEditingController _textController = TextEditingController();
-  final List<ChatMessage> _messages = <ChatMessage>[];
+  List<Message> _messages = <Message>[];
 
+  late GPTMessageManagement _gptMessageManagement;
   bool _isTyping = false;
-  late GPTMessageManagement gptMessageManagement;
 
-  final SpeechToText _speechToText = SpeechToText();
-  bool _speechEnabled = false;
-  String _lastWords = '';
+  final SpeechToTextManager _speechToTextManager = SpeechToTextManager();
 
-  final List<Map<String, String>> supportedLanguages = [
-    {'imageUrl': 'assets/images/united-states.png', 'name': 'English', 'value':'en-US'},
-    {'imageUrl': 'assets/images/vietnam.png', 'name': 'Vietnamese', 'value':'vi-VN'},
-  ];
-  Map<String, String>? _currentLanguage;
-  LocaleName _selectedLocale = LocaleName('en_US', 'English');
-
+  bool _isLoading = false;
+  
   @override
   void initState() {
     super.initState();
-    gptMessageManagement = GPTMessageManagement();
 
-    _currentLanguage = supportedLanguages.first;
-    setLocale(_currentLanguage!);
+    getMessageHistory();
 
-    _initSpeech();
-  }
+    _gptMessageManagement = GPTMessageManagement();
 
-  void setLocale(Map<String, String> locale) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('locale_value', locale['value']!);
-    await prefs.setString('locale_name', locale['name']!);
-  }
+    _speechToTextManager.initSpeech(setState);
 
-  void _setTextToSpeechLocale() async {
-    if(_speechToText.isAvailable && _speechEnabled) {
-      var locales = await _speechToText.locales();
+    settingsPropertyChangedNotifier.addListener((key) {
+      switch (key) {
+        case 'language':
+          setState(() {
+            _speechToTextManager.getCurrentLanguageFromSetting();  
 
-      _selectedLocale = locales
-      .firstWhere((locale) => 
-        locale.localeId == _currentLanguage!['value'].toString().replaceAll('-', '_')
-      );
-    }
-  }
-
-  void _initSpeech() async {
-    _speechEnabled = await _speechToText.initialize();
-
-   _setTextToSpeechLocale();
-
-    setState(() {});
-  }
-
-  void _startListening() async {
-    await _speechToText.listen(
-      onResult: _onSpeechResult,
-      localeId: _selectedLocale.localeId,
-      listenMode: ListenMode.confirmation,
-    );
-    setState(() {
-      debugPrint('start listening: ${_speechToText.isListening} ... ${_speechEnabled}');
-    });
-  } 
-
-  void _stopListening() async {
-    await _speechToText.stop();
-    setState(() {
-      debugPrint('stop listening: ${_speechToText.isListening} ... ${_speechEnabled}');
+            _speechToTextManager.setSpeechToTextLocale();
+          });
+          break;
+        default:
+      }
+      
     });
   }
 
-  void _onSpeechResult(SpeechRecognitionResult result) {
+  getMessageHistory() async {
+    _isLoading = true;
+    final messageHistory = (await MessageManagement.db.getAllMessages()).reversed.toList();
+    setState(() {
+      _messages = messageHistory;
+      _isLoading = false;
+    });
+  }
+
+  _onDoneSpeechRecognition() async {
+    await Future.delayed(const Duration(seconds: 2));
+    _sendMessage();
+  }
+
+  _onSpeechResult(SpeechRecognitionResult result) {
     debugPrint('_onSpeechResult ${result.recognizedWords}');
+
+    if(result.finalResult){
+      _onDoneSpeechRecognition();
+    }
+
     setState(() {
       _textController.text = result.recognizedWords;
-      if(result.finalResult){
-        _sendMessage();
-      }
     });
   }
 
-  void _sendMessage() {
+  _sendMessage() {
     String myMessage = _textController.text;
     _textController.clear();
 
-    ChatMessage message = ChatMessage(
-      text: myMessage,
-      sender: 'MToan',
-      isMe: true,
-    );
+    Message newMessageFromMe = Message(isMe: true, text: myMessage);
+    MessageManagement.db.newMessage(newMessageFromMe);
 
     setState(() {
-      _messages.insert(0, message);
+      _messages.insert(0, newMessageFromMe);
       _isTyping = true;
     });
 
-    gptMessageManagement.sendMessageToGPT(myMessage).then((value) =>
+    _gptMessageManagement.sendMessageToGPT(myMessage).then((value) =>
     { 
       setState(() {
+        String responseContent = value != '' ? value : 'I have some error, please try again later!';
         _isTyping = false;
-        _messages.insert(0, ChatMessage(
-          text: value,
-          sender: 'GPT',
-          isMe: false,
-        ));
 
-        TextToSpeech.speak(value);
-      })
-    }).timeout(const Duration(seconds: 60), onTimeout: () => {
-      setState(() {
-        _isTyping = false;
-        _messages.insert(0, ChatMessage(
-          text: 'I have some error, please try again later!',
-          sender: 'GPT',
-          isMe: false,
-        ));
+        Message newMessageFromGPT = Message(isMe: false, text: responseContent, isFirstReading: false);
+        MessageManagement.db.newMessage(newMessageFromGPT);
+
+        _messages.insert(0, newMessageFromGPT);
       })
     });
   }
 
-  Widget _buildDropdown(){
-    return DropdownButtonHideUnderline(
-      child: DropdownButton2(
-        isExpanded: true,
-        isDense: true,
-        items: supportedLanguages.map((e) => DropdownMenuItem(
-          value: e,
-          child: Row(
-            children: [
-              Image.asset(e['imageUrl']!, width: 30, height: 30,),
-              SizedBox(width: 10,),
-              Text(e['name']!, style: TextStyle(fontSize: 14, color: Colors.black),)
-            ],
-          ),
-        )).toList(),
-        value: _currentLanguage,
-        onChanged: (value) {
-          setState(() {
-            _currentLanguage = value as Map<String, String>?;
-            TextToSpeech.setLanguage(_currentLanguage!['value']!);  
-            _setTextToSpeechLocale();
-          });
-        },
-        buttonStyleData: ButtonStyleData(
-          height: 45,
-          width: 200,
-          padding: const EdgeInsets.only(left: 14, right: 14),
-          decoration: BoxDecoration(
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(14),
-              bottomLeft: Radius.circular(14),
-              bottomRight: Radius.circular(14),
-            ),
-            border: Border.all(
-              color: Color.fromARGB(66, 83, 80, 80),
-            ),
-            color: Color.fromARGB(255, 216, 221, 217),
-          ),
-          elevation: 2,
-        ),
-        iconStyleData: const IconStyleData(
-          icon: Icon(
-            Icons.arrow_forward_ios_outlined,
-          ),
-          iconSize: 14,
-          iconEnabledColor: Colors.black,
-          iconDisabledColor: Colors.grey,
-        ),
-        dropdownStyleData: DropdownStyleData(
-          maxHeight: 200,
-          width: 200,
-          padding: null,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            color: Color.fromARGB(255, 216, 221, 217),
-          ),
-          elevation: 8,
-          scrollbarTheme: ScrollbarThemeData(
-            radius: const Radius.circular(40),
-            thickness: MaterialStateProperty.all(6),
-            thumbVisibility: MaterialStateProperty.all(true),
-          )
-        ),
-        menuItemStyleData: const MenuItemStyleData(
-          height: 40,
-          padding: EdgeInsets.only(left: 14, right: 14),
-        ),
-      )
-    );
+  _listen() async {
+    if(_speechToTextManager.isNotListening()){
+      if(!_speechToTextManager.isSpeechEnabledOnDevice()){
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Speech not enabled'),
+              content: const Text('Please enable speech on your device'),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+          );
+      } else {
+        await _speechToTextManager.startListening(_onSpeechResult, setState);
+      }
+    } else {
+      await _speechToTextManager.stopListening(setState);
+    }
   }
 
   Widget _buildChatInput() {
@@ -216,8 +141,11 @@ class _ChatScreenState extends State<ChatScreen>{
         color: context.cardColor,
       ),
       child: Row(
+        crossAxisAlignment: _speechToTextManager.isNotListening() ? 
+                              CrossAxisAlignment.end : CrossAxisAlignment.center,
         children: [
           Expanded(
+            flex: 9,
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 maxHeight: 300,
@@ -225,37 +153,115 @@ class _ChatScreenState extends State<ChatScreen>{
               child: TextField(
                 controller: _textController,
                 decoration: const InputDecoration(
-                  hintText: 'Type your message here...',
-                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(15),
+                  hintText: 'Aa...',
+                  fillColor: Color.fromARGB(255, 238, 237, 237),
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.all(Radius.circular(25),
+                  ),
+                  )
                 ),
                 maxLines: null,
-                onChanged: (value) {
-                  setState(() {
-                    _isTyping = value.isNotEmpty;
-                  });
-                },
               ),
             ),
           ),
-          IconButton(
-            icon: Icon(
-                _speechToText.isNotListening ? Icons.mic_off : Icons.mic,
-                color: _speechToText.isNotListening ? Colors.black : Colors.red
-            ),
-            tooltip: 'Listen',
-            onPressed: () {
-              _speechToText.isNotListening ? _startListening() : _stopListening();
-            },
-          ),
-          _speechToText.isNotListening ?
-          IconButton(
-            icon: const Icon(Icons.send, color: Colors.green),
-            onPressed: () {
-              _sendMessage();
-            },
-          ) : Container(),
+          _speechToTextManager.isNotListening() ? 
+          Row(
+            children:[
+              IconButton(
+                icon: Icon(
+                    Icons.mic,
+                    color: Theme.of(context).primaryColor,
+                ),
+                highlightColor: Colors.transparent,
+                tooltip: 'Voice input',
+                onPressed: _listen,
+              ),
+              IconButton(
+                icon: Icon(Icons.send, color: Theme.of(context).primaryColor),
+                highlightColor: Colors.transparent,
+                onPressed: () {
+                  _sendMessage();
+                },
+              ),
+            ]
+          )
+          : 
+          Expanded(
+            flex: 3,
+            child: AvatarGlow(
+              showTwoGlows: true,
+                animate: _speechToTextManager.isListening(),
+                glowColor: Colors.red,
+                endRadius: 35.0,
+                duration: const Duration(milliseconds: 1500),
+                repeatPauseDuration: const Duration(milliseconds: 100),
+                repeat: true,
+                child: SizedBox(
+                  height: 75,
+                  child: FloatingActionButton.small(
+                    backgroundColor: Colors.red,
+                    onPressed: _listen,
+                    child: Icon(_speechToTextManager.isListening() ? Icons.mic : Icons.mic_none, size:18),
+                  ),
+                ),
+              ),
+          )
+          
         ],
       ),
+    );
+  }
+
+  Widget _buildLoadProgress(){
+    return Stack(
+      children: [
+        Container(
+          alignment: AlignmentDirectional.center,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).primaryColor,
+              borderRadius: BorderRadius.circular(10.0)
+              ),
+              width: 170.0,
+              height: 150.0,
+              alignment: AlignmentDirectional.center,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Center(
+                    child: SizedBox(
+                      height: 50.0,
+                      width: 50.0,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        value: null,
+                        strokeWidth: 7.0,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 25.0),
+                    child: const Center(
+                      child: Text(
+                        "Loading ...",
+                        style: TextStyle(
+                          color: Colors.white
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+        ),
+      ],
     );
   }
 
@@ -263,45 +269,77 @@ class _ChatScreenState extends State<ChatScreen>{
   Widget build(BuildContext context) { 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('VoiceGPT'),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            SizedBox(width: 40,),
+            Text('Chat with GPT-3', style: TextStyle(fontSize: 18.0)),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                // padding: const EdgeInsets.all(1.0),
+                child: Image(
+                  image: AssetImage(_speechToTextManager.getCurrentLanguage()['imageUrl']!.toString()),
+                  fit: BoxFit.cover,
+                  height: 25,
+                  width: 40,
+                ),
+              ),
+            )
+            ]
+            ),
         actions: [
           IconButton(
             icon: Icon(Icons.settings),
             onPressed:(){
-              // Navigator.push(
-              //   context,
-              //   MaterialPageRoute(builder: (context) => SettingScreen()),
-              // );
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => SettingsScreen(callback: getMessageHistory)),
+              );
             }
           ),
         ],
       ),
       body: Column(
           children: [
-            Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildDropdown()
-                ],
-              ),
             Flexible(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(8),
-                reverse: true,
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  return _messages[index];
-                },
+                child: GestureDetector(
+                  onTap: (){
+                    FocusScopeNode currentFocus = FocusScope.of(context);
+
+                    if (!currentFocus.hasPrimaryFocus) {
+                      currentFocus.unfocus();
+                    }
+                  },
+                  child: _isLoading ? 
+                  Center(
+                    child: _buildLoadProgress(),
+                  ) :
+                  ListView.builder(
+                    padding: const EdgeInsets.all(8),
+                    reverse: true,
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      return ChatMessage(
+                        message: _messages[index],
+                        isAutoReading: _messages[index].isMe? false : getSettingsPropertyValue('auto_reading'),
+                      );
+                    },
+                  ),
+                ),
               ),
-            ),
             _isTyping ? Center(
               child: Container(
-                  margin: EdgeInsets.only(bottom: 10),
-                  child: ThreeDots()
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: const ThreeDots()
               ),
             ) : Container(),
-            const Divider(height: 1),
-            _buildChatInput()
+            _buildChatInput(),
+            SizedBox(height: 5,)
           ],
         ),
     );
