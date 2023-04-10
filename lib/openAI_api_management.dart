@@ -37,7 +37,7 @@ class GPTMessageManagement {
   void addMessageToHistory(String role, String content) {
     history.add({"role": role, "content": content});
 
-    if(history.length > 8) {
+    if(history.length > 6) {
       history.removeAt(0);
     }
   }
