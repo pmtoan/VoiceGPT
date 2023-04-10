@@ -21,11 +21,29 @@ class TextToSpeechManager {
     });
   }
 
-  static void speak(String text) {
-    _flutterTts.speak(text);
+  static void speak(String text, Function callback) async{
+    _flutterTts.startHandler = () {
+      _isVoiceEnabled = true;
+      callback(true);
+    };
+    _flutterTts.completionHandler = () {
+      _isVoiceEnabled = false;
+      callback(false);
+    };
+
+    if(_isVoiceEnabled) {
+      await _flutterTts.stop();
+      _flutterTts.speak(text);
+    } else {
+      _flutterTts.speak(text);
+    }
   }
 
-  static void stop() {
+  static void stop(Function callback) {
+    _flutterTts.cancelHandler = () {
+      _isVoiceEnabled = false;
+      callback(false);
+    };
     _flutterTts.stop();
   }
 

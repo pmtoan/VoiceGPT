@@ -3,11 +3,14 @@ import 'package:chat_app_gpt/settings_screen.dart';
 import 'package:chat_app_gpt/text_to_speech.dart';
 import 'package:easy_settings/easy_settings.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   TextToSpeechManager.initTTS();
   await initializeSettings(SettingsScreen.settingsCategories);
+
+  await dotenv.load(fileName: ".env");
 
   runApp(const MyApp());
 }

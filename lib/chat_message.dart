@@ -11,20 +11,23 @@ class ChatMessage extends StatefulWidget{
 
   Message message;
   bool isAutoReading;
+  bool isReading = false;
 
   @override
   State<ChatMessage> createState() => _ChatMessageState();
 }
 
 class _ChatMessageState extends State<ChatMessage> {
+  done(bool status){
+    debugPrint('done ${status}');
+    setState(() {
+      widget.isReading = status;
+    });
+  }
   @override
   Widget build(BuildContext context) {
     if(widget.isAutoReading && !widget.message.isFirstReading) {
-      TextToSpeechManager.speak(widget.message.text);
-
-      Future.delayed(const Duration(milliseconds: 300), (){
-        setState(() {});
-      });
+      TextToSpeechManager.speak(widget.message.text, done);
     }
 
     widget.message.isFirstReading = true;
@@ -69,20 +72,17 @@ class _ChatMessageState extends State<ChatMessage> {
           widget.message.isMe ? const SizedBox(width: 10) : 
           IconButton(
             icon: Icon(
-              TextToSpeechManager.getVoiceEnabled() ? 
+              widget.isReading ? 
               Icons.stop_circle : 
               Icons.play_circle_outline_outlined,
               color: Theme.of(context).primaryColor,
               ),
             onPressed: () {
-              if(TextToSpeechManager.getVoiceEnabled()) {
-                TextToSpeechManager.stop();
+              if(widget.isReading) {
+                TextToSpeechManager.stop(done);
               } else {
-                TextToSpeechManager.speak(widget.message.text);
+                TextToSpeechManager.speak(widget.message.text, done);
               }
-              Future.delayed(const Duration(milliseconds: 100), (){
-                setState(() {});
-              });
             }
           ),
         ],

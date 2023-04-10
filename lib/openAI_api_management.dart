@@ -1,16 +1,17 @@
 import 'dart:async';
 
 import 'package:chat_gpt_sdk/chat_gpt_sdk.dart';
-import 'package:sqflite/sqflite.dart';
-
+import 'package:flutter/widgets.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 class GPTMessageManagement {
-  final String apiKey = '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';
+  final String apiKey = dotenv.get('OPENAI_API_KEY');
 
   late OpenAI openAI ;
 
   List<Map<String, String>> history = [];
 
   GPTMessageManagement() {
+    debugPrint(apiKey);
     openAI = OpenAI.instance.build(
         token: apiKey,
         baseOption: HttpSetup(receiveTimeout: const Duration(seconds: 120)),
